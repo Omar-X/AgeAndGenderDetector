@@ -1,107 +1,135 @@
-"""
-The Purpose of this program is to generate a model that can detect the age as well as the gender of a person
-from a given image. The model is trained on the UTKFace dataset. The model is saved as a .h5 file.
-"""
+import pandas as pd
 import numpy as np
 import os
-from tqdm import tqdm
-import random
-import cv2
 
-from keras.layers import Dense, Flatten, Conv2D, Dropout, MaxPooling2D  # Importing the required libraries
-from keras.utils import to_categorical  # for the model
-from keras.models import Sequential  # to be trained
-from sklearn.model_selection import train_test_split  # on the dataset
+from PIL import Image
+from keras_preprocessing.image import load_img
+from tqdm.notebook import tqdm
+from matplotlib import pyplot as plt
+
 import tensorflow as tf
+from keras.models import Sequential, Model
+from keras.utils import to_categorical
+from keras.layers import Dense, Conv2D, Dropout, Flatten, MaxPooling2D, Input
+
+BASE_DIR = 'UTKFace'
+
+# Load the data
+# labels - age, gender, ethnicity
+gender_dict = {0: 'Male', 1: 'Female'}
+image_paths = []
+age_labels = []
+gender_labels = []
+number_of_images = len(os.listdir(BASE_DIR))
+category_age = np.zeros((number_of_images, 7), dtype='float32')
 
 
-def age_group(age):  # Function to group the ages into 7 categories
-    if age >= 60:
+def age_group(Person_age):  # Function to group the ages into 7 categories
+    if Person_age >= 60:
         return 6
     else:
-        return int(age / 10)
+        return int(Person_age / 10)
 
 
-path = "UTKFace/"  # Path to the dataset
-filenames = os.listdir(path)
-size = len(filenames)
-print("Total samples:", size)
+def images_extractor(images):  # Function to read and resize the images
+    features = []
+    for image in tqdm(images):
+        img = load_img(image, grayscale=True)
+        img = img.resize((128, 128), Image.ANTIALIAS)
+        img = np.array(img)
+        features.append(img)
 
-images = []  # list to store the images
-ages = []  # list to store the ages
-genders = []  # list to store genders
-for file in tqdm(filenames):
-    image = cv2.imread(path + file, 0)
-    image = cv2.resize(image, dsize=(200, 200))
-    image = image.reshape((image.shape[0], image.shape[1], 1))
-    images.append(image)
-    split_var = file.split('_')
-    ages.append(split_var[0])
-    genders.append(int(split_var[1]))
-
-AgeTarget = np.zeros((size, 1), dtype='float32')
-GenderTarget = np.zeros((size, 1), dtype='float32')
-age = np.zeros((size, 1), dtype='float32')
-# category_age = np.zeros((size, 7), dtype='float32')
-
-features = np.zeros((size, 200, 200, 1), dtype='float32')
-randomnums = random.sample(range(0, size), size)
-for i in range(size):
-    age[i] = age_group(int(ages[randomnums[i]]))
-    GenderTarget[i] = genders[randomnums[i]]
-    features[i] = images[randomnums[i]]
-# add an extra dimension to the array to make it suitable for the model
-AgeTarget = age
-features = features / 255.0
+    features = np.array(features)
+    # ignore this step if using RGB
+    features = features.reshape((len(features), 128, 128, 1))
+    return features
 
 
-# split the dataset into training and testing sets
-x_train, x_test, y_age_train, y_age_test, y_gender_train, y_gender_test = train_test_split(features, AgeTarget,
-                                                                                           GenderTarget, test_size=0.2,
-                                                                                           random_state=42)
+def get_age_from_group(age_list):
+    largest_value = max(age_list)
+    for index, age in enumerate(age_list):
+        if age == largest_value:
+            if index != 6:
+                return "{}-{}".format(index * 10, index * 10 + 9)
+            else:
+                return "60+"
 
-# first and second convolutional layers
-model = Sequential()
-model.add(Conv2D(filters=32, kernel_size=7, padding="same", activation="relu", input_shape=(200, 200, 1)))
-model.add(Conv2D(filters=32, kernel_size=3, padding="same", activation="relu"))
-model.add(MaxPooling2D(pool_size=2))
-model.add(Dropout(0.25))
 
-# third and fourth convolutional layers
-model.add(Conv2D(filters=64, kernel_size=3, padding="same", activation="relu"))
-model.add(Conv2D(filters=128, kernel_size=3, padding="same", activation="relu"))
-model.add(MaxPooling2D(pool_size=2))
+def predictor(image_index):  # get the prediction of the model and compare it with the original image
+    print("Original Gender:", gender_dict[y_gender[image_index]], "Original Age:", age_labels[image_index])
+    predict = model.predict(Modified_Input[image_index].reshape(1, 128, 128, 1))
+    predict_gender = gender_dict[round(predict[0][0][0])]
+    predict_age = get_age_from_group(predict[1][0])
+    print("Predicted Gender:", predict_gender, "Predicted Age:", predict_age)
+    plt.axis('off')
+    plt.imshow(Modified_Input[image_index].reshape(128, 128), cmap='gray')
+    plt.show()
 
-# fifth convolutional layer
-model.add(Conv2D(filters=128, kernel_size=3, padding="same", activation="relu"))
-model.add(MaxPooling2D(pool_size=2))
-model.add(Dropout(0.25))
 
-# flattening
-model.add(Flatten())
+# Read the images and store them in a dataframe + create the labels for ages and genders
+for index, filename in tqdm(enumerate(os.listdir(BASE_DIR))):
+    image_path = os.path.join(BASE_DIR, filename)
+    temp = filename.split('_')
+    age = int(temp[0])
+    category_age[index] = to_categorical(age_group(age), num_classes=7)
+    gender = int(temp[1])
+    image_paths.append(image_path)
+    age_labels.append(age)
+    gender_labels.append(gender)
+
+df = pd.DataFrame()  # create a dataframe
+df['image'], df['age'], df['gender'] = image_paths, age_labels, gender_labels
+
+# Preprocess the data
+Modified_Input = images_extractor(df['image']) / 255.0
+
+y_gender = np.array(df['gender'])
+y_age = np.array(category_age)
+
+input_shape = (128, 128, 1)
+
+inputs = Input(input_shape)
+# convolutional layers
+conv_1 = Conv2D(32, kernel_size=(3, 3), activation='relu')(inputs)
+maxp_1 = MaxPooling2D(pool_size=(2, 2))(conv_1)
+drop_1 = Dropout(0.3)(maxp_1)
+
+conv_2 = Conv2D(64, kernel_size=(3, 3), activation='relu')(drop_1)
+maxp_2 = MaxPooling2D(pool_size=(2, 2))(conv_2)
+
+conv_3 = Conv2D(128, kernel_size=(3, 3), activation='relu')(maxp_2)
+maxp_3 = MaxPooling2D(pool_size=(2, 2))(conv_3)
+
+conv_4 = Conv2D(256, kernel_size=(3, 3), activation='relu')(maxp_3)
+maxp_4 = MaxPooling2D(pool_size=(2, 2))(conv_4)
+
+flatten = Flatten()(maxp_4)
 
 # fully connected layers
-model.add(Dense(500, activation="relu"))
-model.add(Dropout(0.50))
-model.add(Dense(500, activation="relu"))
-model.add(Dropout(0.25))
-model.add(Dense(250, activation="relu"))
+dense_1 = Dense(256, activation='relu')(flatten)
+dense_2 = Dense(256, activation='relu')(flatten)
 
-# output layers
-model.add(Dense(1, activation="softmax", name="age_output"))
-model.add(Dense(1, activation="softmax", name="gender_output"))
+dropout_1 = Dropout(0.2)(dense_1)
+dropout_2 = Dropout(0.2)(dense_2)
 
-model.compile(loss=['binary_crossentropy'], optimizer='adam', metrics=['accuracy'])
-model.summary()
+hidden_dense_1 = Dense(512, activation='relu')(dropout_1)
+hidden_dense_2 = Dense(512, activation='relu')(dropout_2)
 
+hidden_dropout_1 = Dropout(0.3)(hidden_dense_1)
+hidden_dropout_2 = Dropout(0.3)(hidden_dense_2)
 
-# train the model
-test_set = [x_test, y_age_test, y_gender_test]
-csv_logger = tf.keras.callbacks.CSVLogger('agedetector.csv')
+output_1 = Dense(1, activation='sigmoid', name='gender_out')(hidden_dropout_1)
+output_2 = Dense(7, activation='softmax', name='age_out')(hidden_dropout_2)
 
-# train the model
-model.fit(x_train, [y_age_train, y_gender_train], validation_data=test_set, epochs=10, batch_size=32, callbacks=[csv_logger])
+model = Model(inputs=[inputs], outputs=[output_1, output_2])
+
+model.compile(loss=['binary_crossentropy', 'binary_crossentropy'], optimizer='adam', metrics=['accuracy'])
+
+history = model.fit(x=Modified_Input, y=[y_gender, y_age], batch_size=32, epochs=10, validation_split=0.2)
 
 # save the model
 destFile = './AgeGenderDetector.h5'
 model.save(destFile)
+
+predictor(5)
+
