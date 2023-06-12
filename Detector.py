@@ -58,6 +58,8 @@ class FaceFounder:
         if bbox:
             self.out_of_frame = False
             self.facebox = list(bbox[0]["bbox"])
+            self.facebox[1] -= 25
+            self.facebox[3] += 30
             if self.facebox[0] < 0:
                 self.out_of_frame = True
                 self.facebox[0] = 0
