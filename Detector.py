@@ -1,12 +1,13 @@
 import os
 import sys
-
 import cv2
 from cvzone.FaceDetectionModule import FaceDetector
 import numpy as np
-import tensorflow as tf
 from matplotlib import pyplot as plt
 from threading import Thread
+
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+import tensorflow as tf
 
 gender_dict = {0: 'Male', 1: 'Female'}
 
@@ -112,6 +113,7 @@ class AgeGenderDetector:
 
     def loadModel(self):
         if os.path.exists(self.modelPath):
+            # self.model = tf.lite.Interpreter(model_path=self.modelPath)
             self.model = tf.keras.models.load_model(self.modelPath)
             print("Model loaded")
         else:
@@ -151,6 +153,10 @@ class Project:
     def __init__(self, modelPath):
         self.faceFounder = FaceFounder()
         self.ageGenderDetector = AgeGenderDetector(modelPath)
+        self.age_array = []
+        self.gender_array = []
+        self.count = 0
+        self.average_each = 25
 
     def start(self):
         self.faceFounder.start()
@@ -166,8 +172,18 @@ class Project:
                 self.ageGenderDetector.image_array = image_array
 
                 self.ageGenderDetector.predict(printout=False)
-                text = self.ageGenderDetector.predict_gender + " " + self.ageGenderDetector.predict_age
-                self.faceFounder.text = text
+                self.age_array.append(self.ageGenderDetector.prediction[1][0])
+                self.gender_array.append(self.ageGenderDetector.prediction[0][0][0])
+                self.count += 1
+                if self.count == self.average_each:
+                    self.count = 0
+                    age_mean = np.mean(self.age_array, axis=0)
+                    age = get_age_from_group(list(age_mean))
+                    gender = gender_dict[round(sum(self.gender_array) / self.average_each)]
+                    self.age_array = []
+                    self.gender_array = []
+                    text = gender + " " + str(age)
+                    self.faceFounder.text = text
 
 
 if __name__ == "__main__":
