@@ -1,0 +1,10 @@
+cvzone==1.4.1
+keras==2.11.0
+Keras_Preprocessing==1.1.2
+matplotlib==3.1.2
+numpy==1.17.4
+opencv_python==4.5.3.56
+pandas==1.4.2
+Pillow==9.5.0
+tensorflow==2.11.0
+tqdm==4.60.0
