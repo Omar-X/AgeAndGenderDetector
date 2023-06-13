@@ -188,7 +188,7 @@ class Project:
 
 if __name__ == "__main__":
     clear()
-    model_Path = "../AgeAndGenderDetector/AgeGenderDetector.h5"  # Path to model, change it.
+    model_Path = "AgeGenderDetector.h5"  # Path to model, change it.
     project = Project(model_Path)
     project.start()
     project.run()
