@@ -18,5 +18,9 @@ Using Convolution Nerual Networks to detect Age and gender based on the image
 
 ``` python3 Detector.py```
 
+---
+## Example
 
 
+
+![professionalOne](https://github.com/Omar-X/AgeAndGenderDetector/assets/55954393/7a6f2db5-8e8d-4cd5-bbfe-0b0bd63104aa)
